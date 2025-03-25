@@ -2,7 +2,6 @@ import google.generativeai as genai
 from flask import Flask, request, jsonify
 key='kuch toh hai'
 app = Flask(__name__)
-run_with_ngrok(app) 
 genai.configure(api_key=Key)  
 patient_data = {}
 
