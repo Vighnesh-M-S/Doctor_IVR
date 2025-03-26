@@ -3,15 +3,41 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Text Submit & Display</title>
+    <title>Audio Recorder</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="container">
-        <h2>Enter Your Text</h2>
-        <input type="text" id="textInput" placeholder="Type something..." />
-        <button onclick="sendText()">Submit</button>
-        <p id="responseText"></p>
+        <h1>Audio Recorder</h1>
+        
+        <!-- Audio Recording Section -->
+        <div class="recording-section">
+            <button id="startButton">Start Recording</button>
+            <button id="stopButton" disabled>Stop Recording</button>
+        </div>
+        
+        <!-- Audio Playback -->
+        <div class="playback-section">
+            <audio id="audioPlayback" controls></audio>
+        </div>
+        
+        <!-- Audio Upload -->
+        <!-- <div class="upload-section">
+            <input type="file" id="audioUpload" accept="audio/*" />
+            <p>Or upload an existing audio file</p>
+        </div> -->
+        
+        <!-- Send Button -->
+        <div class="action-section">
+            <button id="sendButton" onclick="sendAudio()">Send Audio</button>
+        </div>
+        
+        <!-- Response Display -->
+        <div class="response-section">
+            <h3>Server Response:</h3>
+            <div id="responseText" class="response-box">No response yet</div>
+        </div>
+        
     </div>
     <script src="script.js"></script>
 </body>
