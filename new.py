@@ -1,5 +1,10 @@
-import whisper
+from google import genai
 
-model = whisper.load_model("base")  # Use "small", "medium", or "large" for better accuracy
-result = model.transcribe("Backend/temp_audio_recording.wav")
-print(result["text"])
+client = genai.Client(api_key="AIzaSyCEF9yd8lx8LPorSGvs1lnYH-yk5o5SlAM")
+
+response = client.models.generate_content(
+    model="gemini-2.0-flash",
+    contents="Explain how AI works",
+)
+
+print(response.text)
