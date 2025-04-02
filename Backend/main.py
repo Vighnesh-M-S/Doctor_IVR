@@ -2,6 +2,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi.responses import Response
 from twilio.twiml.voice_response import VoiceResponse
 import requests
+import base64
 from twilio.rest import Client
 # from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
@@ -56,8 +57,14 @@ def make_call():
 async def ivr_response():
     """Handle incoming IVR call and provide response."""
     response = VoiceResponse()
+
     response.say("Welcome to the AI-powered IVR. Please state your symptoms after the beep.")
     response.record(action="/process-audio", method="POST", play_beep=True, timeout=10)
+    
+    # Fallback in case no input is received
+    # response.say("Sorry, we didn't hear anything.")
+    # response.redirect("/ivr")
+
     return Response(content=str(response), media_type="application/xml")
 
 @app.post("/process-audio")
@@ -65,30 +72,48 @@ async def process_audio(request: Request):
     """Download Twilio audio, transcribe it, and generate a response."""
     form_data = await request.form()
     recording_url = form_data.get("RecordingUrl")
+    recording_sid = form_data.get("RecordingSid")
 
-    if not recording_url:
-        return {"detail": "No recording URL found in Twilio request."}
+    if not recording_url or not recording_sid:
+        return {"detail": "Recording URL or SID missing."}
 
-    # Download the audio file from Twilio
+    # Ensure URL has proper format
+    if not recording_url.endswith(".wav"):
+        recording_url += ".wav"
+    
+    # Fetch recording metadata (optional but recommended)
+    metadata_url = f"https://api.twilio.com/2010-04-01/Accounts/{twilio_sid}/Recordings/{recording_sid}.json"
     auth = (twilio_sid, twilio_auth_token)
-    audio_response = requests.get(recording_url, auth=auth)
+    
+    try:
+        metadata_response = requests.get(metadata_url, auth=auth)
+        metadata_response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        return {"detail": f"Failed to fetch recording metadata: {str(e)}"}
+    
+    # Download the audio file from Twilio
+    headers = {
+        "Authorization": f"Basic {base64.b64encode(f'{twilio_sid}:{twilio_auth_token}'.encode()).decode()}",
+        "Accept": "audio/wav"
+    }
 
-    if audio_response.status_code != 200:
-        return {"detail": "Failed to download audio from Twilio."}
-
+    try:
+        audio_response = requests.get(recording_url, headers=headers)
+        audio_response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        return {"detail": f"Failed to download audio from Twilio: {str(e)}"}
+    
     # Save the audio file locally
     audio_path = "twilio_recording.wav"
     with open(audio_path, "wb") as audio_file:
         audio_file.write(audio_response.content)
-
+    
     # Transcribe the audio using Whisper
     result = model.transcribe(audio_path)
     transcribed_text = result["text"]
-    
-    # Log the transcribed text (for debugging)
     print(f"Transcribed text: {transcribed_text}")
 
-    # Create a Twilio IVR response
+    # Generate IVR response
     twilio_response = VoiceResponse()
     twilio_response.say(f"You said: {transcribed_text}. Thank you!")
     
