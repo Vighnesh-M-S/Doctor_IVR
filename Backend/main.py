@@ -5,6 +5,7 @@ import requests
 import base64
 from twilio.rest import Client
 # from pydantic import BaseModel
+from requests.auth import HTTPBasicAuth
 from fastapi.middleware.cors import CORSMiddleware
 import aiofiles
 import whisper
@@ -153,25 +154,26 @@ async def process_audio(request: Request):
     """Download Twilio audio, transcribe it, and generate a response."""
     form_data = await request.form()
     recording_url = form_data.get("RecordingUrl")
-    recording_sid = form_data.get("RecordingSid")
-
-    if not recording_url or not recording_sid:
-        return {"detail": "Recording URL or SID missing."}
-
-    # Fetch recording using authentication
-    auth = (twilio_sid, twilio_auth_token)
-    
-    try:
-        audio_response = requests.get(recording_url, auth=auth, stream=True)  # Authenticate directly
-        audio_response.raise_for_status()
-    except requests.exceptions.RequestException as e:
-        return {"detail": f"Failed to download audio from Twilio: {str(e)}"}
-    
-    # Save the audio file
     audio_path = "twilio_recording.wav"
-    with open(audio_path, "wb") as audio_file:
-        audio_file.write(audio_response.content)
-    
+
+    if not recording_url:
+        return {"detail": "Recording URL is missing."}
+
+    try:
+        response = requests.get(recording_url, stream=True)
+        response.raise_for_status()
+
+        with open(audio_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+
+        print(f"Audio downloaded successfully to {audio_path}")
+
+    except requests.exceptions.RequestException as e:
+        return {"detail": f"Error downloading audio: {str(e)}"}
+    except Exception as e:
+        return {"detail": f"An unexpected error occurred: {str(e)}"}
+
     # Transcribe using Whisper
     result = model.transcribe(audio_path)
     transcribed_text = result["text"]
@@ -180,7 +182,9 @@ async def process_audio(request: Request):
     # Respond with confirmation
     twilio_response = VoiceResponse()
     twilio_response.say(f"You said: {transcribed_text}. If this is correct, press 1. Otherwise, press 2 to re-record.")
+    
     gather = twilio_response.gather(num_digits=1, action="/confirm-input", method="POST")
+    twilio_response.append(gather)  # Attach the gather input to the response
 
     return Response(content=str(twilio_response), media_type="application/xml")
 
