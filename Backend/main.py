@@ -15,6 +15,7 @@ import os
 import uvicorn
 import time
 import urllib.parse
+from google.genai import types
 
 conversation_store = {}
 
@@ -36,9 +37,9 @@ twilio_client = Client(twilio_sid, twilio_auth_token)
 
 # Doctor database (for demo purposes)
 DOCTORS_DB = {
-    "1": ["Doctor. Smith - Cardiologist", "Doctor. Patel - Cardiologist"],
-    "2": ["Doctor. Khan - Dermatologist", "Doctor. Lee - Dermatologist"],
-    "3": ["Doctor. Davis - Orthopedic", "Doctor. Mehta - Orthopedic"]
+    "1": ["Doctor. Kumar", "Doctor. Patel"],
+    "2": ["Doctor. Ramesh", "Doctor. Suresh"],
+    "3": ["Doctor. Maya", "Doctor. Neha"]
 }
 
 app = FastAPI()
@@ -88,7 +89,7 @@ async def menu_selection(request: Request):
 
     if digit_pressed == "1":
         gather = Gather(num_digits=1, action="/select-department", timeout=5)
-        gather.say("Press 1 for Cardiology. Press 2 for Dermatology. Press 3 for Orthopedic.")
+        gather.say("Press 1 for Obstetrics and Gynecology . Press 2 for Midwifery Department. Press 3 for Radiology/Imaging Department.")
         response.append(gather)
     
     elif digit_pressed == "2":
@@ -209,14 +210,18 @@ def get_gemini_response(prompt: str) -> str:
         "Use simple language and a supportive tone."
     )
 
-    response = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=[
-            {"role": "user", "parts": [system_instruction + " User query: " + prompt]}
-        ],
-    )
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction
+            ),
+            contents=prompt
+        )
+        return response.text if hasattr(response, "text") else "Sorry, I couldn't understand that."
 
-    return response.text if hasattr(response, 'text') else "Sorry, I couldn't understand that."
+    except Exception as e:
+        return f"An error occurred: {e}"
 
 
 @app.post("/confirm-input")
