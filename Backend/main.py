@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Query
 from fastapi.responses import Response
 from twilio.twiml.voice_response import VoiceResponse, Gather
 import requests
@@ -12,8 +12,11 @@ import whisper
 from google import genai
 from dotenv import load_dotenv
 import os
+import uvicorn
+import time
+import urllib.parse
 
-
+conversation_store = {}
 
 model = whisper.load_model("base")
 load_dotenv() 
@@ -151,7 +154,6 @@ async def book_appointment(request: Request, dept: str):
 
 @app.post("/process-audio")
 async def process_audio(request: Request):
-    """Download Twilio audio, transcribe it, and generate a response."""
     form_data = await request.form()
     recording_url = form_data.get("RecordingUrl")
     audio_path = "twilio_recording.wav"
@@ -159,49 +161,120 @@ async def process_audio(request: Request):
     if not recording_url:
         return {"detail": "Recording URL is missing."}
 
-    try:
-        response = requests.get(recording_url, stream=True)
-        response.raise_for_status()
+    print(f"[DEBUG] Received recording URL: {recording_url}")
 
-        with open(audio_path, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
+    success = False
+    for attempt in range(3):
+        try:
+            print(f"[DEBUG] Attempt {attempt+1}: Trying to download audio...")
+            response = requests.get(recording_url, stream=True)
+            if response.status_code == 200:
+                with open(audio_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        f.write(chunk)
+                print(f"[DEBUG] Audio downloaded successfully to {audio_path}")
+                success = True
+                break
+            else:
+                print(f"[DEBUG] Received status {response.status_code} from Twilio")
+        except requests.exceptions.RequestException as e:
+            print(f"[DEBUG] Error on attempt {attempt+1}: {str(e)}")
 
-        print(f"Audio downloaded successfully to {audio_path}")
+        time.sleep(2)
 
-    except requests.exceptions.RequestException as e:
-        return {"detail": f"Error downloading audio: {str(e)}"}
-    except Exception as e:
-        return {"detail": f"An unexpected error occurred: {str(e)}"}
+    if not success:
+        return {"detail": "Error downloading audio: Recording URL not available after retries."}
 
-    # Transcribe using Whisper
     result = model.transcribe(audio_path)
-    transcribed_text = result["text"]
-    print(f"Transcribed text: {transcribed_text}")
+    transcribed_text = result["text"].strip()
+    print(f"[DEBUG] Transcribed text: {transcribed_text}")
 
-    # Respond with confirmation
+    # ✅ Encode text for URL
+    encoded_text = urllib.parse.quote(transcribed_text)
+
     twilio_response = VoiceResponse()
-    twilio_response.say(f"You said: {transcribed_text}. If this is correct, press 1. Otherwise, press 2 to re-record.")
-    
-    gather = twilio_response.gather(num_digits=1, action="/confirm-input", method="POST")
-    twilio_response.append(gather)  # Attach the gather input to the response
+    gather = twilio_response.gather(
+        num_digits=1,
+        action=f"/confirm-input?query={encoded_text}",
+        method="POST"
+    )
+    gather.say(f"You said: {transcribed_text}. If this is correct, press 1. Otherwise, press 2 to re-record.")
 
     return Response(content=str(twilio_response), media_type="application/xml")
 
+def get_gemini_response(prompt: str) -> str:
+    system_instruction = (
+        "You are a helpful assistant responding to women's health concerns, especially related to pregnancy. "
+        "Your reply should be short, clear, and easy to understand. Avoid using complex medical terms. "
+        "Use simple language and a supportive tone."
+    )
+
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=[
+            {"role": "user", "parts": [system_instruction + " User query: " + prompt]}
+        ],
+    )
+
+    return response.text if hasattr(response, 'text') else "Sorry, I couldn't understand that."
+
+
 @app.post("/confirm-input")
-async def confirm_input(request: Request):
-    """Handle user confirmation of transcribed text."""
+async def confirm_input(request: Request, query: str = Query(default="")):
     form_data = await request.form()
     digit = form_data.get("Digits")
+    call_sid = form_data.get("CallSid")
     response = VoiceResponse()
-    
+
     if digit == "1":
-        response.say("Thank you! Your input has been recorded.")
+        user_query = urllib.parse.unquote(query)
+        if not user_query:
+            response.say("Sorry, your request could not be found.")
+            return Response(content=str(response), media_type="application/xml")
+
+        gemini_reply = get_gemini_response(user_query)
+        conversation_store[call_sid] = gemini_reply
+
+        response.say(gemini_reply)
+
+        gather = response.gather(num_digits=1, action="/next-action", method="POST")
+        gather.say("Press 1 to repeat. Press 2 to ask a follow-up. Press 3 to end the conversation.")
+
     elif digit == "2":
         response.say("Please state your concern again after the beep.")
         response.record(action="/process-audio", method="POST", play_beep=True, timeout=10)
+
     else:
-        response.say("Invalid selection. Please try again.")
+        response.say("Invalid input. Redirecting.")
         response.redirect("/process-audio")
-    
+
     return Response(content=str(response), media_type="application/xml")
+
+@app.post("/next-action")
+async def next_action(request: Request):
+    form_data = await request.form()
+    digit = form_data.get("Digits")
+    call_sid = form_data.get("CallSid")
+    response = VoiceResponse()
+
+    if digit == "1":
+        reply = conversation_store.get(call_sid, "Sorry, nothing to repeat.")
+        response.say(reply)
+        response.redirect("/confirm-input")  # This can be adapted to keep context if needed
+
+    elif digit == "2":
+        response.say("Please state your follow-up after the beep.")
+        response.record(action="/process-audio", method="POST", play_beep=True, timeout=10)
+
+    elif digit == "3":
+        response.say("Thank you for calling. Goodbye!")
+
+    else:
+        response.say("Invalid choice. Let's try again.")
+        response.redirect("/confirm-input")
+
+    return Response(content=str(response), media_type="application/xml")
+
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=True)
