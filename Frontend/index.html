@@ -1,44 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audio Recorder</title>
-    <link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8" />
+  <title>IVR Call Logs</title>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-    <div class="container">
-        <h1>Audio Recorder</h1>
-        
-        <!-- Audio Recording Section -->
-        <div class="recording-section">
-            <button id="startButton">Start Recording</button>
-            <button id="stopButton" disabled>Stop Recording</button>
-        </div>
-        
-        <!-- Audio Playback -->
-        <div class="playback-section">
-            <audio id="audioPlayback" controls></audio>
-        </div>
-        
-        <!-- Audio Upload -->
-        <!-- <div class="upload-section">
-            <input type="file" id="audioUpload" accept="audio/*" />
-            <p>Or upload an existing audio file</p>
-        </div> -->
-        
-        <!-- Send Button -->
-        <div class="action-section">
-            <button id="sendButton" onclick="sendAudio()">Send Audio</button>
-        </div>
-        
-        <!-- Response Display -->
-        <div class="response-section">
-            <h3>Server Response:</h3>
-            <div id="responseText" class="response-box">No response yet</div>
-        </div>
-        
-    </div>
-    <script src="script.js"></script>
+  <div class="container">
+    <h1>IVR Call Logs</h1>
+    <button onclick="fetchLogs()">Refresh Logs</button>
+    <div id="logs" class="logs-container"></div>
+  </div>
+
+  <script src="script.js"></script>
 </body>
 </html>

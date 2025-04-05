@@ -1,5 +1,5 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Query
-from fastapi.responses import Response
+from fastapi.responses import Response, JSONResponse
 from twilio.twiml.voice_response import VoiceResponse, Gather
 import requests
 import base64
@@ -16,6 +16,9 @@ import uvicorn
 import time
 import urllib.parse
 from google.genai import types
+from fastapi import APIRouter
+from memory import call_logs
+from datetime import datetime
 
 conversation_store = {}
 
@@ -41,6 +44,12 @@ DOCTORS_DB = {
     "2": ["Doctor. Ramesh", "Doctor. Suresh"],
     "3": ["Doctor. Maya", "Doctor. Neha"]
 }
+
+call_logs = {
+    "session_1": ["User called", "Asked about appointment", "System replied with available slots"],
+    "session_2": ["User called", "Asked about pregnancy tips", "System replied with advice"],
+}
+
 
 app = FastAPI()
 
@@ -280,6 +289,22 @@ async def next_action(request: Request):
 
     return Response(content=str(response), media_type="application/xml")
 
+# In-memory store
+# call_logs = {}
+
+# Example of how you might add logs
+# def log_call(sid: str, transcription: str, gemini_response: str, booked_specialization: str = None):
+#     entry = {
+#         "timestamp": datetime.utcnow().isoformat(),
+#         "transcription": transcription,
+#         "gemini_response": gemini_response,
+#         "booked_specialization": booked_specialization
+#     }
+#     call_logs.setdefault(sid, []).append(entry)
+
+@app.get("/logs")
+def get_call_logs():
+    return JSONResponse(content=call_logs)
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=True)
