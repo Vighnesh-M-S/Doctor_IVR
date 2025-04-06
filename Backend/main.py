@@ -1,6 +1,8 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Query
 from fastapi.responses import Response, JSONResponse
 from twilio.twiml.voice_response import VoiceResponse, Gather
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 import requests
 import base64
 from twilio.rest import Client
@@ -66,6 +68,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.mount("/static", StaticFiles(directory="../Frontend"), name="static")
+
+@app.get("/")
+async def read_index():
+    return FileResponse("../Frontend/index.html")
 
 @app.get("/make-call")
 def make_call():
