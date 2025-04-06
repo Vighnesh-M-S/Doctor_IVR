@@ -9,7 +9,7 @@ ENV PYTHONUNBUFFERED 1
 WORKDIR /app
 
 # Copy all project files
-COPY . /app
+COPY backend/ /app/
 
 # Install dependencies
 RUN apt-get update && apt-get install -y git && pip install --upgrade pip
