@@ -50,6 +50,10 @@ call_logs = {
     "session_2": ["User called", "Asked about pregnancy tips", "System replied with advice"],
 }
 
+def log_step(call_sid: str, message: str):
+    if call_sid not in call_logs:
+        call_logs[call_sid] = []
+    call_logs[call_sid].append(message)
 
 app = FastAPI()
 
@@ -93,15 +97,19 @@ async def menu_selection(request: Request):
     """Handles user menu selection"""
     form_data = await request.form()
     digit_pressed = form_data.get("Digits")
+    call_sid = form_data.get("CallSid")
+    log_step(call_sid, "User called and reached main menu")
 
     response = VoiceResponse()
 
     if digit_pressed == "1":
+        log_step(call_sid, "User chose to book an appointment")
         gather = Gather(num_digits=1, action="/select-department", timeout=5)
         gather.say("Press 1 for Obstetrics and Gynecology . Press 2 for Midwifery Department. Press 3 for Radiology/Imaging Department.")
         response.append(gather)
     
     elif digit_pressed == "2":
+        log_step(call_sid, "User chose to state a health concern")
         response.say("Please state your concern after the beep.")
         response.record(action="/process-audio", method="POST", play_beep=True, timeout=10)
 
@@ -116,6 +124,15 @@ async def select_department(request: Request):
     """Handles department selection"""
     form_data = await request.form()
     dept_selected = form_data.get("Digits")
+    call_sid = form_data.get("CallSid")
+    # log_step(call_sid, f"User selected department {dept_selected}")
+    if dept_selected == "1":
+        log_step(call_sid, f"User selected department Obstetrics and Gynecology")
+    elif dept_selected == "2":
+        log_step(call_sid, f"User selected department Midwifery")
+    else:
+        log_step(call_sid, f"User selected department Radiology/Imaging")
+
 
     response = VoiceResponse()
 
@@ -139,6 +156,8 @@ async def book_appointment(request: Request, dept: str):
     """Handles appointment booking"""
     form_data = await request.form()
     doctor_index = form_data.get("Digits")
+    call_sid = form_data.get("CallSid")
+    # log_step(call_sid, f"Appointment booked with {doctor_name}")
 
     response = VoiceResponse()
 
@@ -149,6 +168,7 @@ async def book_appointment(request: Request, dept: str):
             doctor_index = int(doctor_index) - 1  # Convert to zero-based index
             if 0 <= doctor_index < len(doctors):
                 doctor_name = doctors[doctor_index]
+                log_step(call_sid, f"Appointment booked with {doctor_name}")
                 response.say(f"Your appointment with {doctor_name} has been booked. Thank you!")
             else:
                 response.say("Invalid selection. Redirecting to main menu.")
@@ -167,6 +187,8 @@ async def process_audio(request: Request):
     form_data = await request.form()
     recording_url = form_data.get("RecordingUrl")
     audio_path = "twilio_recording.wav"
+    call_sid = form_data.get("CallSid")
+
 
     if not recording_url:
         return {"detail": "Recording URL is missing."}
@@ -198,6 +220,7 @@ async def process_audio(request: Request):
     result = model.transcribe(audio_path)
     transcribed_text = result["text"].strip()
     print(f"[DEBUG] Transcribed text: {transcribed_text}")
+    log_step(call_sid, f"User said: {transcribed_text}")
 
     # ✅ Encode text for URL
     encoded_text = urllib.parse.quote(transcribed_text)
@@ -248,6 +271,7 @@ async def confirm_input(request: Request, query: str = Query(default="")):
 
         gemini_reply = get_gemini_response(user_query)
         conversation_store[call_sid] = gemini_reply
+        log_step(call_sid, f"Gemini replied: {gemini_reply}")
 
         response.say(gemini_reply)
 
@@ -306,5 +330,14 @@ async def next_action(request: Request):
 def get_call_logs():
     return JSONResponse(content=call_logs)
 
+# Shutdown event
+# @app.on_event("shutdown")
+# def shutdown_event():
+#     client.close()
+
+@app.on_event("shutdown")
+def shutdown_event():
+    print("Shutting down FastAPI app.")
+
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8080)
