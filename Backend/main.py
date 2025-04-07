@@ -59,7 +59,7 @@ def log_step(call_sid: str, message: str):
 
 app = FastAPI()
 
-# app.mount("/Static", StaticFiles(directory="Static"), name="static")
+app.mount("/Static", StaticFiles(directory="Static"), name="static")
 # CORS Middleware to allow frontend requests
 app.add_middleware(
     CORSMiddleware,
@@ -71,7 +71,7 @@ app.add_middleware(
 
 @app.get("/")
 async def read_index():
-    return FileResponse(os.path.join("static", "index.html"))
+    return FileResponse(os.path.join("Static", "index.html"))
 
 @app.get("/make-call")
 def make_call():
