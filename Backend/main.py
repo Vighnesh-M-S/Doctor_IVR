@@ -59,7 +59,7 @@ def log_step(call_sid: str, message: str):
 
 app = FastAPI()
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# app.mount("/Static", StaticFiles(directory="Static"), name="static")
 # CORS Middleware to allow frontend requests
 app.add_middleware(
     CORSMiddleware,
