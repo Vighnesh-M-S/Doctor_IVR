@@ -13,7 +13,7 @@ This project is an AI-powered IVR (Interactive Voice Response) system designed t
 ## Tech Stack
 - **Backend**: FastAPI, Python
 - **Frontend**: HTML, CSS, JavaScript
-- **AI Integration**: Google Gemini API, Vertex AI
+- **AI Integration**: Google Gemini API, Whisper(OpenAI)
 - **Telephony**: Twilio
 - **Database**: PostgreSQL (Cloud SQL)
 - **Deployment**: Docker, Google Cloud Run
